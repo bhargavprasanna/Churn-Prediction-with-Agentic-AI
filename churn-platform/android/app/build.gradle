@@ -1,0 +1,12 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.churn.platform'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'com.churn.platform'; minSdk 24; targetSdk 34; versionCode 1; versionName '1.1'
+        // Backend URL baked into the APK:  gradle assembleDebug -PSERVER_URL=https://your-server
+        buildConfigField 'String', 'SERVER_URL', "\"${project.findProperty('SERVER_URL') ?: 'http://10.0.2.2:8000'}\""
+    }
+    buildFeatures { buildConfig true }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}

@@ -1,0 +1,62 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Agentic Churn Platform</title>
+<style>
+:root{--navy:#14264a;--teal:#008489;--bg:#f8faff;--card:#fff;--ink:#1d2540;--mut:#5b6785;--red:#c0404a;--amb:#dc8630;--grn:#2e855a;--line:#d9e0ef}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1730;--card:#17244a;--ink:#eaf0ff;--mut:#9fb0d6;--line:#2c3d6e}}
+*{box-sizing:border-box}body{margin:0;font:15px/1.45 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--navy);color:#fff;padding:14px 18px}header small{color:#8fd6d9;font-weight:700;letter-spacing:.04em}
+header h1{margin:2px 0 0;font-size:20px}
+nav{display:flex;gap:6px;padding:10px 14px;overflow-x:auto;background:var(--card);border-bottom:1px solid var(--line)}
+nav button{border:1px solid var(--teal);background:none;color:var(--teal);padding:8px 14px;border-radius:10px;font-weight:600;white-space:nowrap}
+nav button.on{background:var(--teal);color:#fff}main{padding:14px;max-width:1100px;margin:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 2px 6px #0001}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.kpi b{display:block;font-size:26px;color:var(--teal)}
+.kpi span{color:var(--mut);font-weight:600;font-size:13px}h2{margin:0 0 10px;font-size:17px}
+button.p{background:var(--teal);color:#fff;border:0;padding:10px 16px;border-radius:10px;font-weight:700}button.s{background:none;border:1.5px solid var(--teal);color:var(--teal);padding:10px 16px;border-radius:10px;font-weight:700}
+.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:560px}th{background:var(--navy);color:#fff;padding:9px;text-align:left;font-size:13px}td{padding:9px;border-bottom:1px solid var(--line)}
+tr.r{cursor:pointer}.High{background:#c0404a22}.Medium{background:#dc863022}.Low{background:#2e855a18}
+.bar{display:flex;align-items:center;gap:10px;margin:8px 0}.bar i{display:block;height:20px;border-radius:6px}.warn{color:var(--amb);font-weight:600;font-size:13px}.note{color:var(--mut);font-style:italic;font-size:13px}
+.badge{display:inline-block;background:var(--red);color:#fff;border-radius:8px;padding:4px 12px;font-weight:700}pre{white-space:pre-wrap;font-size:12px;color:var(--mut)}
+</style></head><body>
+<header><small>SOFTWARE REQUIREMENTS &amp; SYSTEM DESIGN</small><h1>Agentic Churn Platform</h1></header>
+<nav id="nav"></nav><main id="m"></main>
+<script>
+const API=(window.CHURN_API||"")+"/api";let job=null,rows=[],sel=new Set(),tab="upload",cur=null;
+const $=s=>document.querySelector(s),esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const TABS=[["upload","1. Load data"],["review","2. Review & approve"],["dash","Dashboard"],["detail","Offer & reasons"],["audit","Audit & config"]];
+function nav(){$("#nav").innerHTML=TABS.map(([k,l])=>`<button class="${k==tab?"on":""}" onclick="go('${k}')">${l}</button>`).join("")}
+async function j(u,o){const r=await fetch(API+u,o);if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||r.statusText);return r.json()}
+async function go(t){tab=t;nav();const m=$("#m");
+ if(t=="upload")m.innerHTML=`<div class="card"><h2>1. Load customer data</h2><input type="file" id="f" accept=".csv"><p><button class="p" onclick="up()">Validate &amp; score</button></p><div id="st"></div><p class="warn">Contact fields are access-controlled and excluded from model features.</p><p class="note">Need a file? Use any CSV from sample_data/ (customers, spotify_users, netflix_users, amazon_customers) (include a 'churn' column for model training; without it the transparent rule-based fallback is used).</p></div>`;
+ else if(!job)m.innerHTML=`<div class="card">Upload a CSV first.</div>`;
+ else if(t=="review")await review();else if(t=="dash")await dash();else if(t=="detail")detail();else await audit()}
+async function up(){const f=$("#f").files[0];if(!f)return $("#st").textContent="Choose a CSV file first.";const fd=new FormData();fd.append("file",f);
+ try{$("#st").textContent="Uploading…";job=(await j("/jobs",{method:"POST",body:fd})).job_id;poll()}catch(e){$("#st").innerHTML=`<span class=warn>${esc(e.message)}</span>`}}
+async function poll(){const s=await j("/jobs/"+job);$("#st").innerHTML=`State: <b>${esc(s.state)}</b>`+(s.reason?` — <span class=warn>${esc(s.reason)}</span>`:"");
+ if(["Queued","Processing"].includes(s.state))return setTimeout(poll,800);
+ if(s.state=="Awaiting approval"){const q=s.dashboard.quality;$("#st").innerHTML+=`<br>Schema status: ${q.schema_status} · Records: ${q.records} · Warnings: ${q.missing_values} missing values ${q.log.map(esc).join("; ")}<br><button class="s" onclick="go('review')">Review high-risk customers →</button>`}}
+async function review(){rows=await j("/jobs/"+job+"/customers");const r=rows.filter(x=>x.offer);
+ $("#m").innerHTML=`<div class="card"><h2>2. Review high-risk customers and proposed offers</h2><div class="tw"><table><tr><th></th><th>Customer</th><th>Plan</th><th>Risk</th><th>Score</th><th>Offer</th><th>Status</th></tr>${r.slice(0,200).map(x=>`<tr class="r" onclick="cur='${esc(x.customer_id)}';go('detail')"><td onclick="event.stopPropagation()"><input type=checkbox ${sel.has(x.customer_id)?"checked":""} ${x.offer.status!="Pending"?"disabled":""} onchange="this.checked?sel.add('${esc(x.customer_id)}'):sel.delete('${esc(x.customer_id)}')"></td><td>${esc(x.customer_id)}</td><td>${esc(x.plan)}</td><td class="${x.risk_level}">${x.risk_level}</td><td>${x.churn_score}</td><td>${esc(x.offer.offer_type)}</td><td>${esc(x.offer.status)}</td></tr>`).join("")}</table></div>
+ <p><button class="p" onclick="appr()">Approve selected</button> <button class="s" onclick="tst()">Send test</button> <button class="s" onclick="dlv()">Deliver approved</button> <a href="${API}/jobs/${job}/export.csv"><button class="s">Export CSV</button></a></p><p class="note" id="msg">Prototype: sending is simulated until a provider is configured. Showing top ${Math.min(200,r.length)} of ${r.length}.</p></div>`}
+async function appr(){const r=await j(`/jobs/${job}/approve`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({customer_ids:[...sel]})});sel.clear();await review();$("#msg").textContent=`Approved ${r.approved} offers.`}
+async function tst(){$("#msg").textContent=(await j(`/jobs/${job}/send-test`,{method:"POST"})).status}
+async function dlv(){const r=await j(`/jobs/${job}/deliver`,{method:"POST"});await review();$("#msg").textContent=`${r.processed} processed. ${r.note}`}
+async function dash(){const d=(await j("/jobs/"+job)).dashboard;if(!d)return $("#m").innerHTML=`<div class=card>Not scored yet.</div>`;
+ const mx=Math.max(d.high,d.medium,d.low,1),b=(l,n,c,w)=>`<div class=bar><span style="width:110px;font-weight:600;font-size:13px">${esc(l)}</span><i style="width:${w??n/mx*50}%;background:var(--${c});min-width:4px"></i>${n}</div>`,mm=d.model.metrics,hm=Math.max(...d.score_hist,1);
+ const ho=mm.held_out?`<div class=tw><table style="min-width:420px"><tr><th>Model</th><th>Acc</th><th>Recall</th><th>Prec</th><th>F1</th><th>ROC-AUC</th></tr>${Object.entries(mm.held_out).map(([k,v])=>`<tr style="${k==mm.selected?"font-weight:700;background:#00848922":""}"><td>${k.replace("_"," ")}${k==mm.selected?" ✓ best":""}</td><td>${v.accuracy}</td><td>${v.recall}</td><td>${v.precision}</td><td>${v.f1}</td><td>${v.roc_auc}</td></tr>`).join("")}</table></div>`:`<p class=warn>${esc(mm.note)}</p>`;
+ $("#m").innerHTML=`<div class=grid><div class="card kpi"><span>Customers scored</span><b>${d.customers_scored}</b></div><div class="card kpi"><span>High risk</span><b>${d.high}</b></div><div class="card kpi"><span>Avg. churn score</span><b>${d.avg_score}</b></div><div class="card kpi"><span>Revenue at risk</span><b style="font-size:14px">${esc(d.revenue_at_risk)}</b></div></div>
+ <div class=card><h2>Business insights <small style="color:var(--mut)">(domain: ${esc(d.domain)})</small></h2><ul>${d.insights.map(i=>`<li>${esc(i)}</li>`).join("")}</ul></div>
+ <div class=grid style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))"><div class=card><h2>Customers by risk level</h2>${b("High",d.high,"red")}${b("Medium",d.medium,"amb")}${b("Low / No risk",d.low,"grn")}</div>
+ <div class=card><h2>Churn by plan (avg. score)</h2>${d.by_plan.map(p=>b(p.plan+" ("+p.customers+")",p.avg_score,"teal",p.avg_score*60)).join("")}</div>
+ <div class=card><h2>Score distribution</h2><div style="display:flex;align-items:flex-end;gap:3px;height:90px">${d.score_hist.map((n,i)=>`<div title="${(i/10).toFixed(1)}-${((i+1)/10).toFixed(1)}: ${n}" style="flex:1;background:var(--teal);height:${n/hm*100}%;min-height:2px"></div>`).join("")}</div><div class=note>0.0 → 1.0</div></div>
+ <div class=card><h2>Top churn drivers (high-risk)</h2><ul>${d.top_factors.map(f=>`<li>${esc(f[0])} — ${f[1]} customers</li>`).join("")||"<li>–</li>"}</ul></div></div>
+ <div class=card><h2>Model health and data quality</h2><p>Model <b>${esc(d.model.version)}</b> (${d.model.mode}), evaluated ${esc(d.model.trained_at)}.${mm.selection_metric?" Best model chosen by "+esc(mm.selection_metric)+" from 4 base models + 2 ensembles.":""}</p>${ho}
+ <p>Data quality: ${d.quality.records} records · ${d.quality.missing_values} missing values handled · ${d.quality.n_features} model features · Drift: ${esc(d.drift.status)}</p><p class=note>Detected roles: ${esc(JSON.stringify(d.quality.roles))}${d.quality.log.length?" · "+esc(d.quality.log.join("; ")):""}</p></div>
+ <p class=note>Risk bands use configurable default thresholds; calibrate them with validation data and business costs. Revenue figures are estimates.</p>`}
+function detail(){const x=rows.find(r=>r.customer_id==cur)||rows.find(r=>r.offer);if(!x)return $("#m").innerHTML=`<div class=card>Open Review first and select a customer.</div>`;
+ $("#m").innerHTML=`<div class=card><h2>Selected customer: ${esc(x.customer_id)}</h2><span class=badge style="background:var(--${{High:"red",Medium:"amb",Low:"grn"}[x.risk_level]})">${x.risk_level.toUpperCase()} RISK</span><p><b>Score: ${x.churn_score}</b> · Plan: ${esc(x.plan)} · CLV band: ${x.clv_band}</p><h2 style="color:var(--teal)">Contributing factors</h2><ul>${x.top_factors.map(f=>`<li>${f.direction} ${esc(f.feature)}</li>`).join("")||"<li>None dominant</li>"}</ul>${x.offer?`<p><b>Suggested action: ${esc(x.offer.offer_type)}.</b> Requires manager approval. Status: ${esc(x.offer.status)}</p><p>${esc(x.offer.rationale)}</p>`:"<p>No offer needed (low risk).</p>"}<p class=note>Risk bands are illustrative defaults; calibrate thresholds using validation data and business costs.</p></div>`}
+async function audit(){const a=await j("/jobs/"+job+"/audit"),c=await j("/config");$("#m").innerHTML=`<div class=card><h2>Admin: configuration</h2>${Object.keys(c).map(k=>`<label>${k} <input id="c_${k}" value="${c[k]}" size=5></label> `).join("")}<p><button class=s onclick="saveCfg()">Save (applies to new jobs)</button> <button class=s onclick="cancelJob()">Cancel job</button></p></div><div class=card><h2>Audit log</h2><pre>${esc(a.map(e=>JSON.stringify(e)).join("\n"))}</pre></div>`}
+async function saveCfg(){const b={};for(const k of ["high_threshold","medium_threshold","offer_cost_pct","max_retries"])b[k]=$("#c_"+k).value;await j("/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});alert("Saved")}
+async function cancelJob(){await j(`/jobs/${job}/cancel`,{method:"POST"});audit()}
+go("upload");
+</script></body></html>
